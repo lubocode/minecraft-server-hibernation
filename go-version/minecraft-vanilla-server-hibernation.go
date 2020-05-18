@@ -1,13 +1,16 @@
 /*
 minecraft-vanilla_server_hibernation is used to start and stop automatically a vanilla minecraft server
 Copyright (C) 2020  gekigek99
+
 v1.1 (Go)
 visit my github page: https://github.com/gekigek99
+Script slightly modified for Docker usage by github.com/lubocode
 */
 
 package main
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -21,8 +24,9 @@ import (
 
 //------------------------modify-------------------------------//
 
-const startminecraftserver = "systemctl start minecraft-server"
-const stopminecraftserver = "systemctl stop minecraft-server"
+var startminecraftserver string // To modify this, have a look at the default values (third argument) of the flags in main() or pass the corresponding command line arguments.
+
+const stopminecraftserver = "screen -S minecraftSERVER -X stuff 'stop\\n'"
 
 const minecraftserverstartuptime = 20
 const timebeforestoppingemptyserver = 120
@@ -92,8 +96,8 @@ func SetServerStatusOnline() {
 //UpdateTimeleft updates the global variable timelefttillup
 func UpdateTimeleft() {
 	if timelefttillup > 0 {
-		timelefttillup--
 		go Timer(1, UpdateTimeleft)
+		timelefttillup--
 	}
 }
 
@@ -111,12 +115,31 @@ func printdatausage() {
 }
 
 func main() {
+	var minRAM string
+	var maxRAM string
+	var mcPath string
+	var mcFile string
+
+	flag.StringVar(&minRAM, "minRAM", "512M", "Specify minimum amount of RAM.")
+	flag.StringVar(&maxRAM, "maxRAM", "2G", "Specify maximum amount of RAM.")
+	flag.StringVar(&mcPath, "mcPath", "/minecraftserver/", "Specify path of Minecraft folder.")
+	flag.StringVar(&mcFile, "mcFile", "minecraft_server.jar", "Specify name of Minecraft .jar file")
+	flag.Parse()
+	minRAM = "-Xms" + minRAM
+	maxRAM = "-Xmx" + maxRAM
+
+	startminecraftserver = "cd " + mcPath + "; screen -dmS minecraftSERVER nice -19 java " + minRAM + " " + maxRAM + " -jar " + mcFile
+
 	fmt.Println("minecraft-vanilla-server-hibernation v1.1 (Go)")
 	fmt.Println("Copyright (C) 2020 gekigek99")
-	fmt.Println("visit my github page for updates: https://github.com/gekigek99")
+	fmt.Println("Original creators github page: https://github.com/gekigek99")
+	fmt.Println("Modified for docker usage by: https://github.com/lubocode")
+	fmt.Println("Container started with the following arguments: \n\tminRAM:" + minRAM + " maxRAM:" + maxRAM + " mcPath:" + mcPath + " mcFile:" + mcFile)
+
 	for {
 		docksocket, err := net.Listen("tcp", listenhost+":"+listenport)
 		CheckError(err)
+		defer StopEmptyMinecraftServer()
 		defer func() {
 			if debug == true {
 				log.Println("Closing connection for: docksocket")
@@ -163,11 +186,11 @@ func handleclientsocket(clientsocket net.Conn) {
 				playername = string(buffer[locationpattern+4 : datalenght])
 			}
 			if serverstatus == "offline" {
-				log.Printf("*** %s tryed to join from %s:%s to %s:%s\n", playername, clientsocketremoteaddr, listenport, targethost, targetport)
+				log.Printf("*** %s tried to join from %s:%s to %s:%s\n", playername, clientsocketremoteaddr, listenport, targethost, targetport)
 				StartMinecraftServer()
 			}
 			if serverstatus == "starting" {
-				log.Printf("*** %s tryed to join from %s:%s to %s:%s during server startup\n", playername, clientsocketremoteaddr, listenport, targethost, targetport)
+				log.Printf("*** %s tried to join from %s:%s to %s:%s during server startup\n", playername, clientsocketremoteaddr, listenport, targethost, targetport)
 				message := BuildMessage(fmt.Sprintf("Server is starting. Please wait. Time left: %d seconds", timelefttillup))
 				clientsocket.Write(message)
 			}

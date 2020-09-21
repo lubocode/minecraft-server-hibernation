@@ -43,7 +43,7 @@ const listenPort = "25555"
 const targetHost = "127.0.0.1"
 const targetPort = "25565"
 
-const debug = false
+const debug = true
 
 const serverVersion = "1.16.2"
 const serverProtocol = 751

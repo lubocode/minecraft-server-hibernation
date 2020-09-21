@@ -45,7 +45,7 @@ const targetPort = "25565"
 
 const debug = true
 
-const serverVersion = "1.16.2"
+const serverVersion = "1.14.4"
 const serverProtocol = 751
 
 //------------------------don't modify------------------------//

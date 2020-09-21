@@ -166,7 +166,8 @@ func main() {
 }
 
 func handleClientSocket(clientSocket net.Conn) {
-	clientAddress := strings.Split(clientSocket.RemoteAddr().String(), ":")[0]
+	var lastIndex int = strings.LastIndex(clientSocket.RemoteAddr().String(), ":")
+	clientAddress := clientSocket.RemoteAddr().String()[:lastIndex]
 	logger(fmt.Sprintf("*** from %s:%s to %s:%s", clientAddress, listenPort, targetHost, targetPort))
 	if serverStatus == "offline" || serverStatus == "starting" {
 		buffer := make([]byte, 1024)

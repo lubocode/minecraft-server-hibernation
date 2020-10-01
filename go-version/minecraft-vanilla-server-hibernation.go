@@ -174,6 +174,7 @@ func handleClientSocket(clientSocket net.Conn) {
 		dataLen, err := clientSocket.Read(buffer)
 		if err != nil {
 			logger("error during clientSocket.Read() 1")
+			log.Fatal(err)
 			return
 		}
 
@@ -197,6 +198,7 @@ func handleClientSocket(clientSocket net.Conn) {
 			dataLen, err = clientSocket.Read(buffer)
 			if err != nil {
 				logger("error during clientSocket.Read() 2")
+				log.Fatal(err)
 				return
 			}
 			playerName := string(buffer[3:dataLen])
@@ -219,6 +221,7 @@ func handleClientSocket(clientSocket net.Conn) {
 		serverSocket, err := net.Dial("tcp", targetHost+":"+targetPort)
 		if err != nil {
 			logger("error during serverSocket.Dial()")
+			log.Fatal(err)
 			return
 		}
 

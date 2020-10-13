@@ -6,7 +6,7 @@ WORKDIR /usr/src/
 RUN go build minecraft-vanilla-server-hibernation.go
 
 # Image for running script
-FROM openjdk:8-jre-alpine
+FROM openjdk:8-jre-slim
 LABEL \
     maintainer="lubocode@outlook.com" \
     org.label-schema.name="minecraftserver-hibernation" \

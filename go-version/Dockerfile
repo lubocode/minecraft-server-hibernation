@@ -1,9 +1,9 @@
 # Image for compiling script
 FROM golang:alpine AS buildstage
 # Copy script, change to subdir and compile
-COPY minecraft-vanilla-server-hibernation.go /usr/src/
+COPY minecraft-server-hibernation.go /usr/src/
 WORKDIR /usr/src/
-RUN go build minecraft-vanilla-server-hibernation.go
+RUN go build minecraft-server-hibernation.go
 
 # Image for running script
 FROM openjdk:8-jre-alpine
@@ -28,5 +28,5 @@ ENV minRAM=512M \
     mcPath=/minecraftserver/ \
     mcFile=minecraft_server.jar
 # Copy compiled go script from first stage
-COPY --from=buildstage /usr/src/minecraft-vanilla-server-hibernation .
-ENTRYPOINT ./minecraft-vanilla-server-hibernation -minRAM=${minRAM} -maxRAM=${maxRAM} -mcPath=${mcPath} -mcFile=${mcFile}
+COPY --from=buildstage /usr/src/minecraft-server-hibernation .
+ENTRYPOINT ./minecraft-server-hibernation -minRAM=${minRAM} -maxRAM=${maxRAM} -mcPath=${mcPath} -mcFile=${mcFile}

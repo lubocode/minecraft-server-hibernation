@@ -22,7 +22,7 @@ var info []string = []string{
 	"Minecraft-Server-Hibernation is used to auto-start/stop a vanilla/modded minecraft server",
 	"Copyright (C) 2019-2020 gekigek99",
 	"v2.4 (Go)",
-	"Visit github page: github.com/gekigek99",
+	"Visit the github page of og author: github.com/gekigek99",
 	"Script slightly modified for Docker usage by github.com/lubocode",
 	"Support the og author at: buymeacoffee.com/gekigek99",
 }
@@ -64,7 +64,7 @@ var dataCountBytesToClients, dataCountBytesToServer float64 = 0, 0
 var stopInstances int = 0
 
 // to keep track of how many seconds are still needed to reach serverStatus == "online"
-var timeLeftUntilUp int
+var timeLeftUntilUp int = minecraftServerStartupTime
 var mutex = &sync.Mutex{}
 
 //--------------------------PROGRAM---------------------------//
@@ -168,7 +168,7 @@ func main() {
 	minRAM = "-Xms" + minRAM
 	maxRAM = "-Xmx" + maxRAM
 
-	startminecraftserver = "cd " + mcPath + "; screen -dmS minecraftSERVER nice -19 java " + minRAM + " " + maxRAM + " -jar " + mcFile + "nogui"
+	startminecraftserver = "cd " + mcPath + "; sudo screen -dmS minecraftSERVER nice -19 java " + minRAM + " " + maxRAM + " -jar " + mcFile + "nogui"
 
 	fmt.Println("Container started with the following arguments: \n\tminRAM:" + minRAM + " maxRAM:" + maxRAM + " mcPath:" + mcPath + " mcFile:" + mcFile)
 	// end of flag parsing
@@ -247,10 +247,7 @@ func handleClientSocket(clientSocket net.Conn) {
 
 			// answer to client with ping
 			answerPingReq(clientSocket)
-		}
-
-		// the client first message is {data, 2} --> the client is trying to join the server
-		if buffer[dataLen-1] == 2 {
+		} else if buffer[dataLen-1] == 2 { // the client first message is {data, 2} --> the client is trying to join the server
 			// read second packet (contains the playerName)
 			dataLen, err = clientSocket.Read(buffer)
 			if err != nil {
@@ -270,6 +267,31 @@ func handleClientSocket(clientSocket net.Conn) {
 				log.Printf("*** %s tried to join from %s:%s to %s:%s during server startup\n", playerName, clientAddress, listenPort, targetHost, targetPort)
 				// answer to client with text in the loadscreen
 				clientSocket.Write(buildMessage("txt", fmt.Sprintf("Server is starting. Please wait... Time left: %d seconds", timeLeftUntilUp)))
+			}
+		} else {
+			// Go probably entangled two packets again and player tried to join. Search for the two bytes 211 2 and split byte array after them.
+			// If no 211 2 in byte array, then ignore request and continue listening.
+			clientMessage := fmt.Sprintln(buffer[:dataLen])
+			logger("Message incomprehensible: \n" + clientMessage)
+			if bytes.Contains(buffer, []byte{211, 2}) {
+				logger("Disentangling join message.")
+				splitBuffer := bytes.SplitAfter(buffer, []byte{211, 2})
+				playerName := splitBuffer[1][3:dataLen]
+
+				if serverStatus == "offline" {
+					// client is trying to join the server and serverStatus == "offline" --> issue startMinecraftServer()
+					startMinecraftServer()
+					log.Printf("*** %s tried to join from %s:%s to %s:%s\n", playerName, clientAddress, listenPort, targetHost, targetPort)
+					// answer to client with text in the loadscreen
+					clientSocket.Write(buildMessage("txt", fmt.Sprintf("Server start command issued. Please wait... Time left: %d seconds", timeLeftUntilUp)))
+
+				} else if serverStatus == "starting" {
+					log.Printf("*** %s tried to join from %s:%s to %s:%s during server startup\n", playerName, clientAddress, listenPort, targetHost, targetPort)
+					// answer to client with text in the loadscreen
+					clientSocket.Write(buildMessage("txt", fmt.Sprintf("Server is starting. Please wait... Time left: %d seconds", timeLeftUntilUp)))
+				}
+			} else {
+				logger("Cannot interpret message. Will ignore and go on to listen for new messages.")
 			}
 		}
 

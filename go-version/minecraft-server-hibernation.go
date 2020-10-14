@@ -127,9 +127,13 @@ func stopEmptyMinecraftServer(forceExec bool) {
 	}
 
 	serverStatus = "offline"
-	err := exec.Command("/bin/bash", "-c", stopminecraftserver).Run()
+	cmd := exec.Command("/bin/bash", "-c", stopminecraftserver)
+	logger("Running command: " + fmt.Sprintln(cmd))
+	err := cmd.Run()
 	if err != nil {
 		log.Printf("error stopping minecraft server: %v\n", err)
+	} else {
+		logger("MC server successfully shut down." + fmt.Sprintln(err))
 	}
 	if forceExec {
 		log.Print("*** MINECRAFT SERVER IS FORCEFULLY SHUTTING DOWN!")
@@ -171,7 +175,7 @@ func main() {
 	minRAM = "-Xms" + minRAM
 	maxRAM = "-Xmx" + maxRAM
 
-	startminecraftserver = "cd " + mcPath + "; sudo screen -dmS minecraftSERVER nice -19 java " + minRAM + " " + maxRAM + " -jar " + mcFile + " nogui"
+	startminecraftserver = "cd " + mcPath + "; screen -dmS minecraftSERVER nice -19 java " + minRAM + " " + maxRAM + " -jar " + mcFile + " nogui"
 
 	fmt.Println("Container started with the following arguments: \n\tminRAM:" + minRAM + " maxRAM:" + maxRAM + " mcPath:" + mcPath + " mcFile:" + mcFile)
 	// end of flag parsing

@@ -44,7 +44,7 @@ const listenPort = "25555"
 const targetHost = "127.0.0.1"
 const targetPort = "25565"
 
-const debug = true
+const debug = false
 
 var serverVersion string = "1.16.2"
 var serverProtocol string = "751"
@@ -71,10 +71,13 @@ var mutex = &sync.Mutex{}
 
 func startMinecraftServer() {
 	serverStatus = "starting"
-
-	err := exec.Command("/bin/bash", "-c", startminecraftserver).Run()
+	cmd := exec.Command("/bin/bash", "-c", startminecraftserver)
+	logger("Running command: " + fmt.Sprintln(cmd))
+	err := cmd.Run()
 	if err != nil {
 		log.Printf("error starting minecraft server: %v\n", err)
+	} else {
+		logger("Server command returned: " + fmt.Sprintln(err))
 	}
 
 	log.Print("*** MINECRAFT SERVER IS STARTING!")
@@ -168,10 +171,25 @@ func main() {
 	minRAM = "-Xms" + minRAM
 	maxRAM = "-Xmx" + maxRAM
 
-	startminecraftserver = "cd " + mcPath + "; sudo screen -dmS minecraftSERVER nice -19 java " + minRAM + " " + maxRAM + " -jar " + mcFile + "nogui"
+	startminecraftserver = "cd " + mcPath + "; sudo screen -dmS minecraftSERVER nice -19 java " + minRAM + " " + maxRAM + " -jar " + mcFile + " nogui"
 
 	fmt.Println("Container started with the following arguments: \n\tminRAM:" + minRAM + " maxRAM:" + maxRAM + " mcPath:" + mcPath + " mcFile:" + mcFile)
 	// end of flag parsing
+
+	// Check if MC server file exists at chosen location
+	if mcPath[len(mcPath)-1:] != "/" {
+		logger("Path without last \"/\". Adding...")
+		mcPath = mcPath + "/"
+	}
+	mcFilePath := mcPath + mcFile
+	logger("mcFilePath: " + mcFilePath)
+	if _, err := os.Stat(mcFilePath); err != nil {
+		if os.IsNotExist(err) {
+			logger("MC server file not found.")
+		}
+	} else {
+		logger("MC server file found.")
+	}
 
 	// block that listen for interrupt signal and issue stopEmptyMinecraftServer(true) before exiting
 	c := make(chan os.Signal, 1)

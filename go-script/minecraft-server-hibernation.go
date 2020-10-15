@@ -23,7 +23,7 @@ var info []string = []string{
 	"Copyright (C) 2019-2020 gekigek99",
 	"v3.6 (Go)",
 	"Visit the github page of og author: github.com/gekigek99",
-	"Script slightly modified for Docker usage by github.com/lubocode",
+	"Script slightly modified for Docker usage by: github.com/lubocode",
 	"Support the og author at: buymeacoffee.com/gekigek99",
 }
 
@@ -31,7 +31,7 @@ var info []string = []string{
 
 var startminecraftserver string // To modify this, have a look at the default values (third argument) of the flags in main() or pass the corresponding command line arguments.
 
-const stopminecraftserver = "screen -S minecraftSERVER -X stuff 'stop\\n'"
+const stopminecraftserver = "sudo screen -S minecraftSERVER -X stuff 'stop\\n'"
 
 const minecraftServerStartupTime = 20
 const timeBeforeStoppingEmptyServer = 60
@@ -46,7 +46,7 @@ const targetPort = "25565"
 
 const debug = false
 
-var serverVersion string = "1.16.2"
+var serverVersion string = "WIP"
 var serverProtocol string = "751"
 
 //------------------------don't modify------------------------//
@@ -159,7 +159,7 @@ func printDataUsage() {
 
 func main() {
 	// prints intro to program
-	fmt.Println(strings.Join(info[1:4], "\n"))
+	fmt.Println(strings.Join(info[1:5], "\n"))
 
 	// Flag parsing for starting MC server with Docker ENV variables
 	var minRAM string
@@ -175,7 +175,7 @@ func main() {
 	minRAM = "-Xms" + minRAM
 	maxRAM = "-Xmx" + maxRAM
 
-	startminecraftserver = "cd " + mcPath + "; screen -dmS minecraftSERVER nice -19 java " + minRAM + " " + maxRAM + " -jar " + mcFile + " nogui"
+	startminecraftserver = "cd " + mcPath + "; sudo screen -dmS minecraftSERVER nice -19 java " + minRAM + " " + maxRAM + " -jar " + mcFile + " nogui"
 
 	fmt.Println("Container started with the following arguments: \n\tminRAM:" + minRAM + " maxRAM:" + maxRAM + " mcPath:" + mcPath + " mcFile:" + mcFile)
 	// end of flag parsing
@@ -219,6 +219,7 @@ func main() {
 	defer func() {
 		logger("Closing connection for: listener")
 		listener.Close()
+		stopEmptyMinecraftServer(true)
 	}()
 
 	log.Println("*** listening for new clients to connect...")
@@ -486,7 +487,7 @@ func buildMessage(format, message string) []byte {
 
 		messageJSON := fmt.Sprint("{",
 			"\"description\":{\"text\":\"", messageAdapted, "\"},",
-			"\"version\":{\"name\":\"", serverVersion, "\",\"protocol\":", fmt.Sprint(serverProtocol), "},",
+			"\"version\":{\"name\":\"", serverVersion, "\",\"protocol\":", serverProtocol, "},",
 			"\"favicon\":\"", serverIcon, "\"",
 			"}",
 		)

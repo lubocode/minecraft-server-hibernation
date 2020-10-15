@@ -12,8 +12,10 @@ LABEL \
     org.label-schema.name="minecraftserver-hibernation" \
     org.label-schema.description="OpenJDK image with go script for automatically starting and stopping the supplied Minecraft server." \
     org.label-schema.url="https://www.minecraft.net/download/server/" \
-    org.label-schema.vcs-url="https://github.com/lubocode/minecraft-vanilla-server-hibernation/tree/master/go-version"
+    org.label-schema.vcs-url="https://github.com/lubocode/minecraft-server-hibernation"
 # Add bash and screen utility to start and stop MC server
+# Sudo currently needed for screen commands
+# Add openjdk for actually running the server
 RUN apk update; \
         apk --no-cache add bash screen sudo; \
         apk --no-cache add openjdk8 --repository=http://dl-cdn.alpinelinux.org/alpine/edge/community

@@ -1,4 +1,5 @@
-# README
+# Minecraft Server Hibernation
+[![mvsh - logo](https://user-images.githubusercontent.com/53654579/90397372-09a9df80-e098-11ea-925c-29e9bdfc0b48.png)](https://github.com/gekigek99/minecraft-server-hibernation)
 
 Go script originally written by [gekigek99](https://github.com/gekigek99/minecraft-server-hibernation)\
 Modified for docker usage by [lubocode](https://github.com/lubocode/minecraft-server-hibernation)

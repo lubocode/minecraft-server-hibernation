@@ -4,9 +4,13 @@
 Go script originally written by [gekigek99](https://github.com/gekigek99/minecraft-server-hibernation)\
 Modified for docker usage by [lubocode](https://github.com/lubocode/minecraft-server-hibernation)
 
+-----
+
 #### Vote for adding optional financial support possibilities:
 https://linkto.run/p/BXYKPR5Y
 Results: https://linkto.run/r/BXYKPR5Y
+
+-----
 
 This image does **NOT** contain a minecraft server installation.\
 Please insert your minecraft server files into the associated volume.
@@ -16,7 +20,7 @@ Similarly, if you want to change the amount of RAM for your MC server, have a lo
 
 The exposed container port is 25555. The script passes traffic through to 25565, which is MCs standard port.
 
-**Usage:**
+## Usage:
 
 ```bash
 docker run \

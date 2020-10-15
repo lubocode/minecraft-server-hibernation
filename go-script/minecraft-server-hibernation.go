@@ -11,18 +11,19 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"strconv"
+	"os/signal"
 	"strings"
 	"sync"
 	"time"
 )
 
+// contains intro to script and program
 var info []string = []string{
-	"Minecraft-Vanilla-Server-Hibernation is used to auto-start/stop a vanilla minecraft server",
+	"Minecraft-Server-Hibernation is used to auto-start/stop a vanilla/modded minecraft server",
 	"Copyright (C) 2019-2020 gekigek99",
-	"v2.4 (Go)",
-	"Visit github page: github.com/gekigek99",
-	"Script slightly modified for Docker usage by github.com/lubocode",
+	"v3.6 (Go)",
+	"Visit the github page of og author: github.com/gekigek99",
+	"Script slightly modified for Docker usage by: github.com/lubocode",
 	"Support the og author at: buymeacoffee.com/gekigek99",
 }
 
@@ -30,7 +31,7 @@ var info []string = []string{
 
 var startminecraftserver string // To modify this, have a look at the default values (third argument) of the flags in main() or pass the corresponding command line arguments.
 
-const stopminecraftserver = "screen -S minecraftSERVER -X stuff 'stop\\n'"
+const stopminecraftserver = "sudo screen -S minecraftSERVER -X stuff 'stop\\n'"
 
 const minecraftServerStartupTime = 20
 const timeBeforeStoppingEmptyServer = 60
@@ -45,84 +46,120 @@ const targetPort = "25565"
 
 const debug = true
 
-const serverVersion = "1.16.2"
-const serverProtocol = 751
+var serverVersion string = "WIP"
+var serverProtocol string = "751"
 
 //------------------------don't modify------------------------//
 
-var players int = 0
-var dataCountBytesToServer, dataCountBytesToClients float64 = 0, 0
+// to keep track of the minecraft server status ("offline", "starting", "online")
 var serverStatus string = "offline"
-var timeLeftUntilUp int = minecraftServerStartupTime
+
+// to keep track of players connected to the server
+var players int = 0
+
+// to calculate the bytes/s from/to server
+var dataCountBytesToClients, dataCountBytesToServer float64 = 0, 0
+
+// to keep track of how many times stopEmptyMinecraftServer() has been called in the last {TimeBeforeStoppingEmptyServer} seconds
 var stopInstances int = 0
+
+// to keep track of how many seconds are still needed to reach serverStatus == "online"
+var timeLeftUntilUp int = minecraftServerStartupTime
 var mutex = &sync.Mutex{}
 
 //--------------------------PROGRAM---------------------------//
 
 func startMinecraftServer() {
-	if serverStatus != "offline" {
-		return
-	}
 	serverStatus = "starting"
-
-	err := exec.Command("/bin/bash", "-c", startminecraftserver).Run()
+	cmd := exec.Command("/bin/bash", "-c", startminecraftserver)
+	logger("Running command: " + fmt.Sprintln(cmd))
+	err := cmd.Run()
 	if err != nil {
 		log.Printf("error starting minecraft server: %v\n", err)
+	} else {
+		logger("Server command returned: " + fmt.Sprintln(err))
 	}
 
 	log.Print("*** MINECRAFT SERVER IS STARTING!")
+
+	// initialization of players
 	players = 0
 
+	// sets serverStatus == "online"
+	//
+	// increases stopInstances by one. after {TimeBeforeStoppingEmptyServer} executes stopEmptyMinecraftServer(false)
 	var setServerStatusOnline = func() {
 		serverStatus = "online"
 		log.Print("*** MINECRAFT SERVER IS UP!")
+
 		mutex.Lock()
 		stopInstances++
 		mutex.Unlock()
-		go timer(timeBeforeStoppingEmptyServer, stopEmptyMinecraftServer)
+		time.AfterFunc(time.Duration(timeBeforeStoppingEmptyServer)*time.Second, func() { stopEmptyMinecraftServer(false) })
 	}
+	// updates timeLeftUntilUp each second. if timeLeftUntilUp == 0 it executes setServerStatusOnline()
 	var updateTimeleft func()
 	updateTimeleft = func() {
 		if timeLeftUntilUp > 0 {
 			timeLeftUntilUp--
-			go timer(1, updateTimeleft)
+			time.AfterFunc(1*time.Second, func() { updateTimeleft() })
+		} else if timeLeftUntilUp == 0 {
+			setServerStatusOnline()
 		}
 	}
 
-	go timer(1, updateTimeleft)
-	go timer(minecraftServerStartupTime, setServerStatusOnline)
+	time.AfterFunc(1*time.Second, func() { updateTimeleft() })
 }
 
-func stopEmptyMinecraftServer() {
-	mutex.Lock()
-	stopInstances--
-	if stopInstances > 0 || players > 0 || serverStatus == "offline" {
-		mutex.Unlock()
-		return
+func stopEmptyMinecraftServer(forceExec bool) {
+	if forceExec && serverStatus != "offline" {
+		// skip some checks to issue the stop server command forcefully
+	} else {
+		// check that there is only one "stop server command" instance running and players <= 0 and serverStatus != "offline".
+		// on the contrary the server won't be stopped
+		mutex.Lock()
+		defer mutex.Unlock()
+
+		stopInstances--
+		if stopInstances > 0 || players > 0 || serverStatus == "offline" {
+			return
+		}
 	}
-	mutex.Unlock()
+
 	serverStatus = "offline"
-	err := exec.Command("/bin/bash", "-c", stopminecraftserver).Run()
+	cmd := exec.Command("/bin/bash", "-c", stopminecraftserver)
+	logger("Running command: " + fmt.Sprintln(cmd))
+	err := cmd.Run()
 	if err != nil {
 		log.Printf("error stopping minecraft server: %v\n", err)
+	} else {
+		logger("MC server successfully shut down." + fmt.Sprintln(err))
 	}
-	log.Print("*** MINECRAFT SERVER IS SHUTTING DOWN!")
+	if forceExec {
+		log.Print("*** MINECRAFT SERVER IS FORCEFULLY SHUTTING DOWN!")
+	} else {
+		log.Print("*** MINECRAFT SERVER IS SHUTTING DOWN!")
+	}
+
+	// reset timeLeftUntilUp to initial value
 	timeLeftUntilUp = minecraftServerStartupTime
 }
 
+// to print each second bytes/s to clients and to server
 func printDataUsage() {
 	mutex.Lock()
-	if dataCountBytesToServer != 0 || dataCountBytesToClients != 0 {
-		logger(fmt.Sprintf("data/s: %8.3f KB/s to clients | %8.3f KB/s to server\n", dataCountBytesToClients/1024, dataCountBytesToServer/1024))
-		dataCountBytesToServer = 0
+	if dataCountBytesToClients != 0 || dataCountBytesToServer != 0 {
+		logger(fmt.Sprintf("data/s: %8.3f KB/s to clients | %8.3f KB/s to server", dataCountBytesToClients/1024, dataCountBytesToServer/1024))
 		dataCountBytesToClients = 0
+		dataCountBytesToServer = 0
 	}
 	mutex.Unlock()
-	go timer(1, printDataUsage)
+	time.AfterFunc(1*time.Second, func() { printDataUsage() })
 }
 
 func main() {
-	fmt.Println(strings.Join(info[1:4], "\n"))
+	// prints intro to program
+	fmt.Println(strings.Join(info[1:5], "\n"))
 
 	// Flag parsing for starting MC server with Docker ENV variables
 	var minRAM string
@@ -138,90 +175,152 @@ func main() {
 	minRAM = "-Xms" + minRAM
 	maxRAM = "-Xmx" + maxRAM
 
-	startminecraftserver = "cd " + mcPath + "; screen -dmS minecraftSERVER nice -19 java " + minRAM + " " + maxRAM + " -jar " + mcFile + "nogui"
+	startminecraftserver = "cd " + mcPath + "; sudo screen -dmS minecraftSERVER nice -19 java " + minRAM + " " + maxRAM + " -jar " + mcFile + " nogui"
 
 	fmt.Println("Container started with the following arguments: \n\tminRAM:" + minRAM + " maxRAM:" + maxRAM + " mcPath:" + mcPath + " mcFile:" + mcFile)
 	// end of flag parsing
 
-	dockSocket, err := net.Listen("tcp", listenHost+":"+listenPort)
-	checkError(err)
+	// Check if MC server file exists at chosen location
+	if mcPath[len(mcPath)-1:] != "/" {
+		logger("Path without last \"/\". Adding...")
+		mcPath = mcPath + "/"
+	}
+	mcFilePath := mcPath + mcFile
+	logger("mcFilePath: " + mcFilePath)
+	if _, err := os.Stat(mcFilePath); err != nil {
+		if os.IsNotExist(err) {
+			logger("MC server file not found.")
+		}
+	} else {
+		logger("MC server file found.")
+	}
+
+	// block that listen for interrupt signal and issue stopEmptyMinecraftServer(true) before exiting
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		for range c {
+			stopEmptyMinecraftServer(true)
+			os.Exit(0)
+		}
+	}()
+
+	// launch printDataUsage()
+	go printDataUsage()
+
+	// open a listener on {listenHost}+":"+{listenPort}
+	listener, err := net.Listen("tcp", listenHost+":"+listenPort)
+	if err != nil {
+		log.Printf("main: Fatal error: %s", err.Error())
+		time.Sleep(time.Duration(5) * time.Second)
+		os.Exit(1)
+	}
 
 	defer func() {
-		stopEmptyMinecraftServer()
-		logger("Closing connection for: dockSocket")
-		dockSocket.Close()
+		logger("Closing connection for: listener")
+		listener.Close()
+		stopEmptyMinecraftServer(true)
 	}()
 
 	log.Println("*** listening for new clients to connect...")
 
-	go printDataUsage()
-
+	// infinite cycle to accept clients. when a clients connects it is passed to handleClientSocket()
 	for {
-		clientSocket, err := dockSocket.Accept()
+		clientSocket, err := listener.Accept()
 		if err != nil {
+			logger("main:", err.Error())
 			continue
 		}
 		handleClientSocket(clientSocket)
 	}
 }
 
+// to handle a client that is connecting.
+// can handle a client that is requesting server info or trying to join.
 func handleClientSocket(clientSocket net.Conn) {
+	// to handle also ipv6 addresses
 	var lastIndex int = strings.LastIndex(clientSocket.RemoteAddr().String(), ":")
 	clientAddress := clientSocket.RemoteAddr().String()[:lastIndex]
+
 	logger(fmt.Sprintf("*** from %s:%s to %s:%s", clientAddress, listenPort, targetHost, targetPort))
+
+	// block containing the case of serverStatus == "offline" or "starting"
 	if serverStatus == "offline" || serverStatus == "starting" {
 		buffer := make([]byte, 1024)
+
+		// read first packet
 		dataLen, err := clientSocket.Read(buffer)
 		if err != nil {
-			logger("error during clientSocket.Read() 1")
-			log.Fatal(err)
+			logger("handleClientSocket: error during clientSocket.Read() 1")
 			return
 		}
 
-		// the client first message is {data, 1} or {data, 1, 1, 0}
+		// the client first packet is {data, 1, 1, 0} or {data, 1} --> the client is requesting server info and ping
 		if buffer[dataLen-1] == 0 || buffer[dataLen-1] == 1 {
 			if serverStatus == "offline" {
 				log.Printf("*** player unknown requested server info from %s:%s to %s:%s\n", clientAddress, listenPort, targetHost, targetPort)
+				// answer to client with emulated server info
 				clientSocket.Write(buildMessage("info", "                   &fserver status:\n                   &b&lHIBERNATING"))
-				answerPingReq(clientSocket)
 
 			} else if serverStatus == "starting" {
 				log.Printf("*** player unknown requested server info from %s:%s to %s:%s during server startup\n", clientAddress, listenPort, targetHost, targetPort)
+				// answer to client with emulated server info
 				clientSocket.Write(buildMessage("info", "                   &fserver status:\n                    &6&lWARMING UP"))
-				answerPingReq(clientSocket)
 			}
+
+			// answer to client with ping
+			answerPingReq(clientSocket)
 		}
 
-		// the client first message is {data, 2}
-		if buffer[dataLen-1] == 2 {
-			// the client second message contains the playerName
-			dataLen, err = clientSocket.Read(buffer)
-			if err != nil {
-				logger("error during clientSocket.Read() 2")
-				log.Fatal(err)
-				return
+		// the client first message is [data, 211, 2] or [data, 211, 2, playerNameData] --> the client is trying to join the server
+		if bytes.Contains(buffer[:dataLen], []byte{211, 2}) {
+			var playerName string
+
+			// if [211, 2] are the last bytes then there is only the join request
+			// read again the client socket to get the player name packet
+			if bytes.Index(buffer[:dataLen], []byte{211, 2}) == dataLen-2 {
+				dataLen, err = clientSocket.Read(buffer)
+				if err != nil {
+					logger("handleClientSocket: error during clientSocket.Read() 2")
+					return
+				}
+				playerName = string(buffer[3:dataLen])
+			} else {
+				// the packet contains the join request and the player name in the scheme:
+				// [... 211 2 (3 bytes) (player name) 0 0 0 0 0...]
+				//  ^-----------------------dataLen-^
+				//                                    ^-zerosLen-^
+				//            ^-playerNameBuffer-----------------^
+				zerosLen := len(buffer) - dataLen
+				playerNameBuffer := bytes.SplitAfter(buffer, []byte{211, 2})[1]
+				playerName = string(playerNameBuffer[3 : len(playerNameBuffer)-zerosLen])
 			}
-			playerName := string(buffer[3:dataLen])
 
 			if serverStatus == "offline" {
+				// client is trying to join the server and serverStatus == "offline" --> issue startMinecraftServer()
 				startMinecraftServer()
-				log.Printf("*** %s tryed to join from %s:%s to %s:%s\n", playerName, clientAddress, listenPort, targetHost, targetPort)
+				log.Printf("*** %s tried to join from %s:%s to %s:%s\n", playerName, clientAddress, listenPort, targetHost, targetPort)
+				// answer to client with text in the loadscreen
 				clientSocket.Write(buildMessage("txt", fmt.Sprintf("Server start command issued. Please wait... Time left: %d seconds", timeLeftUntilUp)))
+
 			} else if serverStatus == "starting" {
-				log.Printf("*** %s tryed to join from %s:%s to %s:%s during server startup\n", playerName, clientAddress, listenPort, targetHost, targetPort)
+				log.Printf("*** %s tried to join from %s:%s to %s:%s during server startup\n", playerName, clientAddress, listenPort, targetHost, targetPort)
+				// answer to client with text in the loadscreen
 				clientSocket.Write(buildMessage("txt", fmt.Sprintf("Server is starting. Please wait... Time left: %d seconds", timeLeftUntilUp)))
 			}
 		}
 
+		// since the server is still not online, close the client connection
 		logger(fmt.Sprintf("closing connection for: %s", clientAddress))
 		clientSocket.Close()
 	}
 
+	// block containing the case of serverStatus == "online"
 	if serverStatus == "online" {
+		// if the server is online, just open a connection with the server and connect it with the client
 		serverSocket, err := net.Dial("tcp", targetHost+":"+targetPort)
 		if err != nil {
-			logger("error during serverSocket.Dial()")
-			log.Fatal(err)
+			logger("handleClientSocket: error during serverSocket.Dial()")
 			return
 		}
 
@@ -229,6 +328,7 @@ func handleClientSocket(clientSocket net.Conn) {
 	}
 }
 
+// launches clientToServer() and serverToClient()
 func connectSocketsAsync(client net.Conn, server net.Conn) {
 	go clientToServer(client, server)
 	go serverToClient(server, client)
@@ -238,50 +338,58 @@ func clientToServer(source, destination net.Conn) {
 	players++
 	log.Printf("*** A PLAYER JOINED THE SERVER! - %d players online", players)
 
+	// exchanges data from client to server (isServerToClient == false)
 	forwardSync(source, destination, false)
 
 	players--
 	log.Printf("*** A PLAYER LEFT THE SERVER! - %d players online", players)
 
+	// this block increases stopInstances by one and starts the timer to execute stopEmptyMinecraftServer(false)
+	// (that will do nothing in case there are players online)
 	mutex.Lock()
 	stopInstances++
 	mutex.Unlock()
-
-	go timer(timeBeforeStoppingEmptyServer, stopEmptyMinecraftServer)
+	time.AfterFunc(time.Duration(timeBeforeStoppingEmptyServer)*time.Second, func() { stopEmptyMinecraftServer(false) })
 }
 
 func serverToClient(source, destination net.Conn) {
+	// exchanges data from server to client (isServerToClient == true)
 	forwardSync(source, destination, true)
 }
 
-//forwardSync takes a source and a destination net.Conn and forwards them (plus takes a true or false to know what it is forwarding)
+// forwardSync takes a source and a destination net.Conn and forwards them.
+// (isServerToClient used to know the forward direction)
 func forwardSync(source, destination net.Conn, isServerToClient bool) {
 	data := make([]byte, 1024)
-	for {
-		source.SetReadDeadline(time.Now().Add(timeBeforeStoppingEmptyServer * time.Second))
-		destination.SetWriteDeadline(time.Now().Add(timeBeforeStoppingEmptyServer * time.Second))
 
+	// set to false after the first for cycle
+	firstBuffer := true
+
+	for {
+		// update read and write timeout
+		source.SetReadDeadline(time.Now().Add(time.Duration(timeBeforeStoppingEmptyServer) * time.Second))
+		destination.SetWriteDeadline(time.Now().Add(time.Duration(timeBeforeStoppingEmptyServer) * time.Second))
+
+		// read data from source
 		dataLen, err := source.Read(data)
 		if err != nil {
+			// case in which the connection is closed by the source or closed by target
 			if err == io.EOF || strings.Contains(err.Error(), "use of closed network connection") {
 				logger(fmt.Sprintf("closing %s --> %s because of: %s", strings.Split(source.RemoteAddr().String(), ":")[0], strings.Split(destination.RemoteAddr().String(), ":")[0], err.Error()))
 			} else {
-				logger(fmt.Sprintf("error in forward(): %v\n%s --> %s", err, strings.Split(source.RemoteAddr().String(), ":")[0], strings.Split(destination.RemoteAddr().String(), ":")[0]))
+				logger(fmt.Sprintf("forwardSync: error in forward(): %v\n%s --> %s", err, strings.Split(source.RemoteAddr().String(), ":")[0], strings.Split(destination.RemoteAddr().String(), ":")[0]))
 			}
+
+			// close the source connection
 			source.Close()
-			destination.Close()
 			break
 		}
+
+		// write data to destination
 		destination.Write(data[:dataLen])
 
+		// if debug == true --> calculate bytes/s to client/server
 		if debug {
-			if serverStatus == "online" && bytes.Contains(data, []byte("\"version\":")) {
-				log.Println("" +
-					"server version found! " +
-					"serverVersion: " + strings.Split(strings.Split(string(data[:dataLen]), "\"name\":")[1], ",")[0] + " " +
-					"serverProtocol: " + strings.Split(strings.Split(string(data[:dataLen]), "\"protocol\":")[1], "},")[0])
-			}
-
 			mutex.Lock()
 			if isServerToClient {
 				dataCountBytesToClients = dataCountBytesToClients + float64(dataLen)
@@ -290,78 +398,106 @@ func forwardSync(source, destination net.Conn, isServerToClient bool) {
 			}
 			mutex.Unlock()
 		}
+
+		// this block is used to find the serverVersion and serverProtocol.
+		// these parameters are only found in serverToClient connection in the first buffer that is read
+		// if the above specified buffer contains "\"version\":{\"name\":\"" and ",\"protocol\":" --> extract the serverVersion and serverProtocol
+		if isServerToClient && firstBuffer && bytes.Contains(data[:dataLen], []byte("\"version\":{\"name\":\"")) && bytes.Contains(data[:dataLen], []byte(",\"protocol\":")) {
+			newServerVersion := string(bytes.Split(bytes.Split(data[:dataLen], []byte("\"version\":{\"name\":\""))[1], []byte("\","))[0])
+			newServerProtocol := string(bytes.Split(bytes.Split(data[:dataLen], []byte(",\"protocol\":"))[1], []byte("}"))[0])
+
+			// if serverVersion or serverProtocol are different from the ones specified in config.json --> update them
+			if newServerVersion != serverVersion || newServerProtocol != serverProtocol {
+				serverVersion = newServerVersion
+				serverProtocol = newServerProtocol
+
+				logger(
+					"server version found!",
+					"serverVersion:", serverVersion,
+					"serverProtocol:", serverProtocol,
+				)
+			}
+		}
+
+		// first cycle is finished, set firstBuffer = false
+		firstBuffer = false
 	}
 }
 
 //---------------------------utils----------------------------//
 
-func checkError(err error) {
-	if err != nil {
-		log.Printf("Fatal error: %s", err.Error())
-		time.Sleep(time.Duration(5) * time.Second)
-		os.Exit(1)
-	}
-}
-
-//timer takes a time interval and execute a function after that time has passed
-func timer(timeleft int, f func()) {
-	time.Sleep(time.Duration(timeleft) * time.Second)
-	f()
-}
-
+// takes the format ("txt", "info") and a message to write to the client
 func buildMessage(format, message string) []byte {
 	var mountHeader = func(messageStr string, constant int) []byte {
-		// format: [header1 header2 header3 data]
+		// mountHeader: mounts the header to a specified message
+		// scheme: 			[header1 												|header2 	|header3 					|message]
+		// bytes used:		[1/2													|1			|1/2						|∞		]
+		// value calc: 		[len(header2) + len(header3) + len(message) + constant	|0			|len(message) + constant 	|message]
+		// possible values:	[1            + 1/2          + ∞            + 0/11264	|0			|∞            + 0/11264		|-------]
 
-		message := []byte(messageStr)
-
-		mesLen := len(message) + constant
-		byteNum := int(math.Ceil(math.Log(float64(mesLen)) / math.Log(255))) // int(math.Ceil(log255(mesLen)))
-		if byteNum > 1 {
-			header3 := make([]byte, byteNum)
-			binary.LittleEndian.PutUint16(header3[:], uint16(mesLen))
-			message = append(header3, message...)
-		} else {
-			header3 := []byte{byte(mesLen)}
-			message = append(header3, message...)
+		var addHeader = func(message []byte) []byte {
+			mesLen := len(message) + constant
+			// calculate the bytes needed to store mesLen
+			// int(math.Ceil(log255(mesLen)))
+			byteNum := int(math.Ceil(math.Log(float64(mesLen)) / math.Log(255)))
+			header := make([]byte, byteNum)
+			if byteNum > 1 {
+				// 2 bytes are needed to store the mesLen --> order them as LittleEndian and store them in header3
+				binary.LittleEndian.PutUint16(header[:], uint16(mesLen))
+			} else {
+				// 1 byte is needed to store the mesLen --> no need to order it
+				header = []byte{byte(mesLen)}
+			}
+			return append(header, message...)
 		}
 
-		header2 := []byte{0}
-		message = append(header2, message...)
+		messageByte := []byte(messageStr)
 
-		mesLen = len(message) + constant
-		byteNum = int(math.Ceil(math.Log(float64(mesLen)) / math.Log(255)))
-		if byteNum > 1 {
-			header1 := make([]byte, byteNum)
-			binary.LittleEndian.PutUint16(header1[:], uint16(mesLen))
-			message = append(header1, message...)
-		} else {
-			header1 := []byte{byte(mesLen)}
-			message = append(header1, message...)
-		}
+		// header3 calculation
+		messageByte = addHeader(messageByte)
 
-		return message
+		// header2 calculation
+		messageByte = append([]byte{0}, messageByte...)
+
+		// header1 calculation
+		messageByte = addHeader(messageByte)
+
+		return messageByte
 	}
 
 	var messageHeader []byte
 
 	if format == "txt" {
-		messageJSON := ("{" +
-			"\"text\":\"" + message + "\"" +
-			"}")
-		messageHeader = mountHeader(messageJSON, 0)
-	} else if format == "info" {
-		messageAdapted := strings.ReplaceAll(strings.ReplaceAll(message, "\n", "&r\\n"), "&", "\xc2\xa7") // in py only \xa7 is used since the py .encode() metod adds the \xc2 byte
+		// to display text in the loadscreen
 
-		messageJSON := ("{" +
-			"\"description\":{\"text\":\"" + messageAdapted + "\"}," +
-			"\"version\":{\"name\":\"" + serverVersion + "\",\"protocol\":" + strconv.Itoa(serverProtocol) + "}," +
-			"\"favicon\":\"" + serverIcon + "\"" +
-			"}")
+		messageJSON := fmt.Sprint(
+			"{",
+			"\"text\":\"", message, "\"",
+			"}",
+		)
+
+		// for txt the constant == 0
+		messageHeader = mountHeader(messageJSON, 0)
+
+	} else if format == "info" {
+		// to send server info
+
+		// in message: "\n" -> "&r\\n" then "&" -> "\xc2\xa7"
+		messageAdapted := strings.ReplaceAll(strings.ReplaceAll(message, "\n", "&r\\n"), "&", "\xc2\xa7")
+
+		messageJSON := fmt.Sprint("{",
+			"\"description\":{\"text\":\"", messageAdapted, "\"},",
+			"\"version\":{\"name\":\"", serverVersion, "\",\"protocol\":", serverProtocol, "},",
+			"\"favicon\":\"", serverIcon, "\"",
+			"}",
+		)
+
+		// for info the constant == 11264
 		messageHeader = mountHeader(messageJSON, 11264)
+
 	} else {
 		logger("buildMessage: specified format invalid")
-		return nil
+		messageHeader = nil
 	}
 
 	return messageHeader
@@ -370,35 +506,51 @@ func buildMessage(format, message string) []byte {
 func answerPingReq(clientSocket net.Conn) {
 	req := make([]byte, 1024)
 
+	// read the first packet
 	dataLen, err := clientSocket.Read(req)
 	if err != nil {
-		logger("error while reading [1] ping request: " + err.Error())
+		logger("answerPingReq: error while reading [1] ping request:", err.Error())
 		return
 	}
 
+	// if req == [1, 0] --> read again (the correct ping byte array have still to arrive)
 	if bytes.Equal(req[:dataLen], []byte{1, 0}) {
 		dataLen, err = clientSocket.Read(req)
 		if err != nil {
-			logger("error while reading [2] ping request: " + err.Error())
+			logger("answerPingReq: error while reading [2] ping request:", err.Error())
 			return
 		}
-	} else if bytes.Equal(req[:2], []byte{1, 0}) { // sometimes the [1 0] is at the beginning and needs to be removed. Example: [1 0 9 1 0 0 0 0 0 89 73 114] -> [9 1 0 0 0 0 0 89 73 114]
-		//go specific
+	} else if bytes.Equal(req[:2], []byte{1, 0}) {
+		// this if is go specific!
+		// sometimes the [1 0] is at the beginning and needs to be removed.
+		// Example: [1 0 9 1 0 0 0 0 0 89 73 114] -> [9 1 0 0 0 0 0 89 73 114]
 		req = req[2:dataLen]
 		dataLen = dataLen - 2
 	}
 
+	// answer the ping request
 	clientSocket.Write(req[:dataLen])
 }
 
-func logger(message string) {
+// prints the args if debug option is set to true
+func logger(args ...string) {
 	if debug {
-		log.Println(message)
+		log.Println(strings.Join(args, " "))
 	}
+}
+
+//------------------------go specific-------------------------//
+
+var cmdIn io.WriteCloser
+
+// initializes some variables
+func initVariables() {
+	timeLeftUntilUp = minecraftServerStartupTime
 }
 
 //---------------------------data-----------------------------//
 
+// contains is the captured picture data of the msh logo
 const serverIcon = "" +
 	"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAgK0lEQVR42uV7CViV55l2kqbpdJqmm" +
 	"WliXGJEURDZOez7DgcO+77KKgKKgvsSg1uioHFhURDTdNJOO1unaWI2474ioknTPY27UWQXBM456P3fz3uApNf/46TXzPyZdriu" +

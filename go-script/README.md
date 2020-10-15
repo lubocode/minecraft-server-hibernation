@@ -16,10 +16,11 @@ The exposed container port is 25555. The script passes traffic through to 25565,
 ```bash
 docker run \
     -p 25555:25555 \
-    -v /docker/appdata/minecraftserver-hibernate:/minecraftserver:rw \
+    -v /absolute/path/to/mc/folder:/minecraftserver:rw \
     -e minRAM=512M \
     -e maxRAM=2G \
     -e mcPath=/minecraftserver/ \
     -e mcFile=minecraft_server.jar \
     minecraftserver-hibernate
 ```
+The volume name inside the container corresponds to the mcPath string.

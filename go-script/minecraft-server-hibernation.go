@@ -31,7 +31,7 @@ var info []string = []string{
 
 var startminecraftserver string // To modify this, have a look at the default values (third argument) of the flags in main() or pass the corresponding command line arguments.
 
-const stopminecraftserver = "sudo screen -S minecraftSERVER -X stuff 'stop\\n'"
+const stopminecraftserver = "screen -S minecraftSERVER -X stuff 'stop\\n'"
 
 const minecraftServerStartupTime = 20
 const timeBeforeStoppingEmptyServer = 60
@@ -175,7 +175,7 @@ func main() {
 	minRAM = "-Xms" + minRAM
 	maxRAM = "-Xmx" + maxRAM
 
-	startminecraftserver = "cd " + mcPath + "; sudo screen -dmS minecraftSERVER nice -19 java " + minRAM + " " + maxRAM + " -jar " + mcFile + " nogui"
+	startminecraftserver = "cd " + mcPath + "; screen -dmS minecraftSERVER nice -19 java " + minRAM + " " + maxRAM + " -jar " + mcFile + " nogui"
 
 	fmt.Println("Container started with the following arguments: \n\tminRAM:" + minRAM + " maxRAM:" + maxRAM + " mcPath:" + mcPath + " mcFile:" + mcFile)
 	// end of flag parsing

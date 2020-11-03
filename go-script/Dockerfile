@@ -21,6 +21,9 @@ RUN apk update; \
         apk --no-cache add openjdk8 --repository=http://dl-cdn.alpinelinux.org/alpine/edge/community; \
         mkdir -p /var/run/screen; \
         sudo chmod 777 /var/run/screen;
+# Add user to run mc server from
+RUN adduser -D -H runtimeuser
+USER runtimeuser
 # Expose Port specified in script
 EXPOSE 25555
 # Volume for user to insert Minecraft server Java file

@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -44,7 +45,7 @@ const listenPort = "25555"
 const targetHost = "127.0.0.1"
 const targetPort = "25565"
 
-const debug = true
+var debug bool = false
 
 var serverVersion string = "WIP"
 var serverProtocol string = "751"
@@ -166,14 +167,17 @@ func main() {
 	var maxRAM string
 	var mcPath string
 	var mcFile string
+	var debugString string
 
 	flag.StringVar(&minRAM, "minRAM", "512M", "Specify minimum amount of RAM.")
 	flag.StringVar(&maxRAM, "maxRAM", "2G", "Specify maximum amount of RAM.")
 	flag.StringVar(&mcPath, "mcPath", "/minecraftserver/", "Specify path of Minecraft folder.")
 	flag.StringVar(&mcFile, "mcFile", "minecraft_server.jar", "Specify name of Minecraft .jar file")
+	flag.StringVar(&debugString, "debug", "false", "True turns debug logging on.")
 	flag.Parse()
 	minRAM = "-Xms" + minRAM
 	maxRAM = "-Xmx" + maxRAM
+	debug, _ = strconv.ParseBool(debugString)
 
 	startminecraftserver = "cd " + mcPath + "; screen -dmS minecraftSERVER nice -19 java " + minRAM + " " + maxRAM + " -jar " + mcFile + " nogui"
 

@@ -31,7 +31,8 @@ VOLUME ["/minecraftserver"]
 ENV minRAM=512M \
     maxRAM=2G \
     mcPath=/minecraftserver/ \
-    mcFile=minecraft_server.jar
+    mcFile=minecraft_server.jar \
+    debug=false
 # Copy compiled go script from first stage
 COPY --from=buildstage /usr/src/minecraft-server-hibernation .
-ENTRYPOINT ./minecraft-server-hibernation -minRAM=${minRAM} -maxRAM=${maxRAM} -mcPath=${mcPath} -mcFile=${mcFile}
+ENTRYPOINT ./minecraft-server-hibernation -minRAM=${minRAM} -maxRAM=${maxRAM} -mcPath=${mcPath} -mcFile=${mcFile} -debug=${debug}

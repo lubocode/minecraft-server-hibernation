@@ -1,5 +1,5 @@
 # Image for compiling script
-FROM golang:alpine AS buildstage
+FROM golang:latest AS buildstage
 # Copy script, change to subdir and compile
 COPY minecraft-server-hibernation.go /usr/src/
 WORKDIR /usr/src/

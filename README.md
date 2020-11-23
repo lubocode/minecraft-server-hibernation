@@ -10,9 +10,10 @@ Your minecraft server file should lie in the top level of the volume and should 
 If you want to deviate from this, use the arguments specified below.
 Similarly, if you want to change the amount of RAM for your MC server, have a look at the arguments as well.
 
-The exposed container port is 25555. The script passes traffic through to 25565, which is MCs standard port.
+The script operates on port 25555 inside the Docker and passes traffic through to 25565 for the MC server, which is MCs standard port. \
+Map the internal port to whatever external port fits you. 25565 would save you the hassle of having to specify a port in the MC client server settings.
 
-## Usage:
+## Usage example:
 
 ```bash
 docker run \
@@ -25,3 +26,6 @@ docker run \
     minecraftserver-hibernate
 ```
 The volume name inside the container corresponds to the mcPath string.
+
+**Please report bugs [here](https://github.com/gekigek99/minecraft-server-hibernation/issues)** \
+As there are only two people working on the script and only me on the docker implementation, we may miss some bugs from time to time and appreciate all help.

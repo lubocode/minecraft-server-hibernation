@@ -4,23 +4,16 @@
 Go script originally written by [gekigek99](https://github.com/gekigek99/minecraft-server-hibernation)\
 Modified for docker usage by [lubocode](https://github.com/lubocode/minecraft-server-hibernation)
 
------
-
-#### Vote for adding optional financial support possibilities:
-https://linkto.run/p/BXYKPR5Y
-Results: https://linkto.run/r/BXYKPR5Y
-
------
-
 This image does **NOT** contain a minecraft server installation.\
 Please insert your minecraft server files into the associated volume.
 Your minecraft server file should lie in the top level of the volume and should be named minecraft_server.jar\
 If you want to deviate from this, use the arguments specified below.
 Similarly, if you want to change the amount of RAM for your MC server, have a look at the arguments as well.
 
-The exposed container port is 25555. The script passes traffic through to 25565, which is MCs standard port.
+The script operates on port 25555 inside the Docker and passes traffic through to 25565 for the MC server, which is MCs standard port. \
+Map the internal port to whatever external port fits you. 25565 would save you the hassle of having to specify a port in the MC client server settings.
 
-## Usage:
+## Usage example:
 
 ```bash
 docker run \
@@ -33,3 +26,6 @@ docker run \
     minecraftserver-hibernate
 ```
 The volume name inside the container corresponds to the mcPath string.
+
+**Please report bugs [here](https://github.com/gekigek99/minecraft-server-hibernation/issues)** \
+As there are only two people working on the script and only me on the docker implementation, we may miss some bugs from time to time and appreciate all help.
